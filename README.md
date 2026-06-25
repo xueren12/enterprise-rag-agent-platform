@@ -1,6 +1,6 @@
 # 企业知识库与业务 Agent 平台
 
-面向秋招展示的企业级 RAG + Tool Calling 项目。当前已完成第一阶段 RAG MVP 和第二阶段 Tool Calling MVP，重点展示企业知识库问答、引用来源、无答案拒答，以及工具注册、参数校验、高风险确认和 mock 业务工具调用。
+面向秋招展示的企业级 RAG + Tool Calling 项目。当前已完成三阶段能力：RAG MVP、Tool Calling MVP、LangGraph 编排。项目重点展示企业知识库问答、引用来源、无答案拒答、工具注册、参数校验、高风险确认、trace 日志和状态图编排。
 
 ## 当前能力
 
@@ -13,9 +13,10 @@
 - 支持 Tool Registry、Pydantic 参数校验和统一工具执行入口。
 - 支持 3 个 mock 业务工具：订单退款查询、用户账号状态查询、后台任务触发。
 - 高风险工具 `script_task_tool` 必须带 `confirm=true` 才能执行。
-- 每次组合调用生成 `trace_id`，并写入 `logs/agent_trace.jsonl`。
+- 使用 LangGraph `StateGraph` 编排 RAG + Tool 流程。
+- 每个图节点写入 trace 日志到 `logs/agent_trace.jsonl`。
 
-## 为什么要切片
+## RAG MVP
 
 企业文档通常较长，直接整体向量化会稀释局部语义，也会让上下文过长。切片可以把检索粒度控制在更接近问题答案的位置。
 
@@ -45,15 +46,52 @@
 
 工具规划暂时使用轻量规则实现，位于 `app/tools/tool_plan.py`。它会识别订单号、用户编号、任务名称，并生成结构化 `ToolCallPlan`。工具执行必须先通过 Pydantic Schema 校验，不允许直接执行未校验的 handler。
 
-## RAG + Tool 组合服务
+## LangGraph 编排
 
-组合服务位于 `app/services/agent_service.py`，当前流程：
+第三阶段将原来 `AgentService.chat()` 内部的线性流程改为 LangGraph 状态图。对外调用方式保持不变，`run_demo.py` 仍然调用：
 
-1. 调用 `RagService.answer(question)` 返回知识库回答和 citations。
-2. 调用 Tool Planner 判断是否需要工具。
-3. 如果需要工具，先校验参数，再执行 mock 工具。
-4. 工具失败不会导致 RAG 问答崩溃。
-5. 返回统一结果：`answer`、`citations`、`need_tool`、`tool_name`、`tool_result`、`error`。
+```python
+AgentService().chat(question, top_k=5, confirm=False)
+```
+
+状态定义位于 `app/state.py`，核心字段包括：
+
+- `trace_id`
+- `question`
+- `top_k`
+- `confirm`
+- `rag_result`
+- `answer`
+- `citations`
+- `tool_plan`
+- `tool_result`
+- `need_tool`
+- `error`
+- `status`
+
+图编排位于 `app/graph.py`，节点如下：
+
+```text
+START
+  ↓
+init_node
+  ↓
+retrieve_node
+  ↓
+tool_plan_node
+  ├── need_tool=false → final_node → END
+  └── need_tool=true  → tool_execute_node
+                         ├── error → fallback_node → END
+                         └── ok    → final_node → END
+```
+
+异常兜底规则：
+
+- `init_node`、`retrieve_node`、`tool_plan_node`、`tool_execute_node` 任一节点产生 `error`，进入 `fallback_node`。
+- 高风险任务未确认时，`tool_execute_node` 返回工具失败结果，并进入 `fallback_node` 组装最终响应。
+- 工具调用失败不会导致整个 RAG 问答崩溃。
+
+每个节点都会继续使用 `LogService` 记录 trace 日志。
 
 ## 快速演示
 
@@ -92,14 +130,20 @@ py -X utf8 -m pytest -q
 - 高风险工具 `confirm=true` 时允许执行。
 - 不存在的工具名返回友好错误。
 - 参数缺失返回友好错误。
-- RAG + Tool 组合服务返回 RAG answer 和 tool_result。
-- 普通 RAG 问题不会误触发工具。
+- 普通 RAG 问题不进入工具执行节点。
+- 订单问题进入 `sql_query_tool`。
+- 用户问题进入 `http_api_tool`。
+- 高风险任务无 confirm 返回失败结果。
+- 高风险任务 confirm=true 可执行。
+- 节点异常时进入 `fallback_node`。
 
 ## 目录说明
 
 ```text
 app/
   config.py
+  state.py
+  graph.py
   rag/
     document_loader.py
     text_splitter.py
@@ -132,10 +176,10 @@ run_demo.py
 ## 本轮没有做的内容
 
 - 没有引入 FastAPI。
-- 没有引入 LangGraph。
 - 没有引入 Redis、Chroma、FAISS 或真实数据库。
 - 没有调用真实外部 HTTP 接口。
+- 没有重写已有 RAG 和 Tool 逻辑。
 
 ## 下一阶段计划
 
-第三阶段建议实现 LangGraph 编排：定义 `AgentState`，拆分 intent、retrieve、answer、tool_plan、tool_validate、tool_execute、fallback 等节点；随后再进入 FastAPI 服务化，补充 `/knowledge/index`、`/agent/chat`、`/trace/{trace_id}` 接口。
+第四阶段建议进入 FastAPI 服务化：补充 `/knowledge/index`、`/agent/chat`、`/trace/{trace_id}` 接口；之后再补缓存、限流、Docker 和更完整的工程化测试。
