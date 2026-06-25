@@ -1,0 +1,2 @@
+# First-stage RAG MVP uses only the Python standard library.
+# Later stages can add FastAPI, LangGraph, Pydantic, Redis and model SDKs.
