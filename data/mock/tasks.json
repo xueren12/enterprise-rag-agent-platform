@@ -1,0 +1,10 @@
+{
+  "refund_status_sync": {
+    "description": "同步长时间 processing 的退款单状态",
+    "risk_level": "high"
+  },
+  "error_code_refresh": {
+    "description": "刷新错误码缓存",
+    "risk_level": "medium"
+  }
+}

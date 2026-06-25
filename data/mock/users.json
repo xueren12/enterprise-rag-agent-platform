@@ -1,0 +1,12 @@
+{
+  "U1001": {
+    "status": "normal",
+    "risk_level": "low",
+    "freeze_reason": ""
+  },
+  "U1002": {
+    "status": "frozen",
+    "risk_level": "high",
+    "freeze_reason": "login_anomaly"
+  }
+}

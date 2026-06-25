@@ -1,0 +1,17 @@
+{
+  "10001": {
+    "refund_status": "processing",
+    "updated_at": "2026-06-01 10:20:00",
+    "payment_channel": "mock_pay"
+  },
+  "10002": {
+    "refund_status": "success",
+    "updated_at": "2026-06-01 11:05:00",
+    "payment_channel": "mock_pay"
+  },
+  "10003": {
+    "refund_status": "failed",
+    "updated_at": "2026-06-01 12:30:00",
+    "payment_channel": "mock_bank"
+  }
+}
