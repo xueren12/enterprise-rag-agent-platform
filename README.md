@@ -15,6 +15,9 @@
 - 高风险工具 `script_task_tool` 必须带 `confirm=true` 才能执行。
 - 使用 LangGraph `StateGraph` 编排 RAG + Tool 流程。
 - 提供 FastAPI 接口：知识库索引、Agent 对话、trace 查询。
+- 提供 `/health` 健康检查接口。
+- 接口异常统一返回 `code/message/trace_id`。
+- 提供 GitHub Actions CI 和 Docker 启动方式。
 - 每个图节点写入 trace 日志到 `logs/agent_trace.jsonl`。
 
 ## RAG MVP
@@ -89,9 +92,24 @@ py -m uvicorn app.main:app --reload
 
 接口列表：
 
+- `GET /health`：健康检查。
 - `POST /knowledge/index`：构建或重建知识库索引。
 - `POST /agent/chat`：提交自然语言问题，返回 RAG 答案和可选工具结果。
 - `GET /trace/{trace_id}`：按 trace_id 查询 `logs/agent_trace.jsonl` 中的链路日志。
+
+健康检查示例：
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+响应：
+
+```json
+{
+  "status": "ok"
+}
+```
 
 构建索引示例：
 
@@ -101,12 +119,51 @@ curl -X POST http://127.0.0.1:8000/knowledge/index ^
   -d "{\"docs_dir\":\"data/docs\"}"
 ```
 
+响应：
+
+```json
+{
+  "status": "success",
+  "indexed_chunks": 6
+}
+```
+
 Agent 对话示例：
 
 ```bash
 curl -X POST http://127.0.0.1:8000/agent/chat ^
   -H "Content-Type: application/json" ^
   -d "{\"question\":\"查询订单 10001 的退款状态。\",\"top_k\":5}"
+```
+
+响应：
+
+```json
+{
+  "trace_id": "e4f1...",
+  "status": "success",
+  "answer": "1. ...",
+  "citations": [
+    {
+      "source": "order_refund_guide.md",
+      "title": "订单退款流程",
+      "chunk_id": "order_refund_guide_001",
+      "score": 0.46
+    }
+  ],
+  "need_tool": true,
+  "tool_name": "sql_query_tool",
+  "tool_args": {
+    "order_id": "10001"
+  },
+  "tool_result": {
+    "order_id": "10001",
+    "refund_status": "processing",
+    "updated_at": "2026-06-01 10:20:00",
+    "payment_channel": "mock_pay"
+  },
+  "error": null
+}
 ```
 
 高风险任务确认示例：
@@ -121,6 +178,64 @@ Trace 查询示例：
 
 ```bash
 curl http://127.0.0.1:8000/trace/{trace_id}
+```
+
+响应：
+
+```json
+{
+  "trace_id": "e4f1...",
+  "events": [
+    {
+      "time": "2026-06-25T08:00:00+00:00",
+      "trace_id": "e4f1...",
+      "node_name": "retrieve_node",
+      "question": "查询订单 10001 的退款状态。",
+      "tool_name": null,
+      "tool_args": {},
+      "success": true,
+      "error": null
+    }
+  ]
+}
+```
+
+统一错误响应：
+
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": "请求参数校验失败",
+  "trace_id": "6d35..."
+}
+```
+
+## Docker 启动
+
+构建并启动：
+
+```bash
+docker compose up --build
+```
+
+服务启动后访问：
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+容器会挂载：
+
+- `./logs:/app/logs`
+- `./vector_store:/app/vector_store`
+
+## CI
+
+项目包含 GitHub Actions 工作流 `.github/workflows/ci.yml`。在 `push` 和 `pull_request` 时自动执行：
+
+```bash
+python -m pip install -r requirements.txt
+python -m pytest -q
 ```
 
 ## 命令行演示
@@ -156,6 +271,8 @@ py -X utf8 -m pytest -q
 - Tool Registry、Tool Planner、Tool Validation、Tool Execution。
 - LangGraph 节点路由、fallback 和高风险确认。
 - FastAPI `/knowledge/index`、`/agent/chat`、`/trace/{trace_id}`。
+- FastAPI `/health`。
+- FastAPI 统一错误响应。
 
 ## 目录说明
 
@@ -178,6 +295,9 @@ data/
 tests/
 vector_store/
 run_demo.py
+Dockerfile
+docker-compose.yml
+.github/workflows/ci.yml
 ```
 
 ## 本轮没有做的内容
@@ -185,7 +305,7 @@ run_demo.py
 - 没有引入 Redis。
 - 没有引入真实数据库。
 - 没有引入真实 LLM。
-- 没有引入 Chroma、FAISS 或 Docker。
+- 没有引入 Chroma 或 FAISS。
 - 没有重构已有 RAG、Tool、LangGraph 逻辑。
 
 ## 下一阶段计划

@@ -10,6 +10,10 @@ class KnowledgeIndexResponse(BaseModel):
     indexed_chunks: int
 
 
+class HealthResponse(BaseModel):
+    status: str
+
+
 class Citation(BaseModel):
     source: str
     title: str | None = None
@@ -32,3 +36,9 @@ class AgentChatResponse(BaseModel):
 class TraceResponse(BaseModel):
     trace_id: str
     events: list[dict[str, Any]]
+
+
+class ErrorResponse(BaseModel):
+    code: str
+    message: str
+    trace_id: str

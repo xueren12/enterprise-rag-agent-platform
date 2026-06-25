@@ -7,6 +7,14 @@ from app.main import app
 
 
 client = TestClient(app)
+error_client = TestClient(app, raise_server_exceptions=False)
+
+
+def test_health_endpoint_returns_ok():
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
 
 
 def test_knowledge_index_endpoint_builds_index():
@@ -89,3 +97,23 @@ def test_trace_endpoint_returns_empty_events_for_missing_trace():
 
     assert response.status_code == 200
     assert response.json() == {"trace_id": "not-exist-trace-id", "events": []}
+
+
+def test_validation_error_uses_unified_error_format():
+    response = client.post("/agent/chat", json={"question": "", "top_k": 0})
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["code"] == "VALIDATION_ERROR"
+    assert payload["message"]
+    assert payload["trace_id"]
+
+
+def test_internal_error_uses_unified_error_format():
+    response = error_client.post("/knowledge/index", json={"docs_dir": "data/not_exists"})
+
+    assert response.status_code == 500
+    payload = response.json()
+    assert payload["code"] == "INTERNAL_ERROR"
+    assert "docs_dir not found" in payload["message"]
+    assert payload["trace_id"]

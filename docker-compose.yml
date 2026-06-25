@@ -1,0 +1,8 @@
+services:
+  enterprise-rag-agent:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./vector_store:/app/vector_store
