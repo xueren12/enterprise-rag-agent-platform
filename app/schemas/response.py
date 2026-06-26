@@ -27,8 +27,11 @@ class AgentChatResponse(BaseModel):
     answer: str
     citations: list[Citation] = Field(default_factory=list)
     used_llm: bool = False
+    llm_provider: str | None = None
+    llm_model: str | None = None
     embedding_provider: str | None = None
     vector_store_type: str | None = None
+    vector_store_fallback_reason: str | None = None
     need_tool: bool
     tool_name: str | None = None
     tool_args: dict[str, Any] = Field(default_factory=dict)

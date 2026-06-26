@@ -68,8 +68,30 @@ def test_mock_llm_generates_answer():
 
     assert result["status"] == "success"
     assert result["used_llm"] is True
+    assert result["llm_provider"] == "mock"
+    assert result["llm_model"] == "mock"
     assert result["answer"]
     assert result["citations"]
+
+
+def test_chroma_fallback_reason_is_returned_in_rag_metadata(tmp_path, monkeypatch):
+    vector_store = VectorStoreService(
+        index_path=tmp_path / "index.json",
+        embedding_provider=HashEmbeddingProvider(),
+        vector_store_type="chroma",
+    )
+
+    def fail_chroma_build(docs):
+        raise RuntimeError("forced chroma outage")
+
+    monkeypatch.setattr(vector_store, "_build_chroma_index", fail_chroma_build)
+    rag = RagService(vector_store=vector_store, llm_service=LLMService(provider="mock"))
+    rag.build_index(DOCS_DIR)
+
+    result = rag.answer("订单退款流程是什么？")
+
+    assert result["vector_store_type"] == "local_fallback"
+    assert result["vector_store_fallback_reason"] == "forced chroma outage"
 
 
 def test_llm_failure_falls_back_to_extractive_answer(tmp_path):
@@ -111,5 +133,10 @@ def test_agent_chat_returns_real_rag_metadata():
 
     assert response.status_code == 200
     assert "used_llm" in payload
+    assert "llm_provider" in payload
+    assert "llm_model" in payload
+    assert payload["llm_provider"] == "mock"
+    assert payload["llm_model"] == "mock"
     assert "embedding_provider" in payload
     assert "vector_store_type" in payload
+    assert "vector_store_fallback_reason" in payload

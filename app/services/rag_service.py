@@ -75,8 +75,10 @@ class RagService:
                     "retrieved_chunks": chunks,
                     "prompt": prompt,
                     "used_llm": llm_response.used_llm,
-                    "embedding_provider": self.vector_store.embedding_provider_name,
-                    "vector_store_type": self.vector_store.vector_store_type,
+                    **self._runtime_metadata(
+                        llm_provider=llm_response.provider,
+                        llm_model=llm_response.model,
+                    ),
                 }
         except Exception:
             pass
@@ -92,8 +94,7 @@ class RagService:
             "retrieved_chunks": chunks,
             "prompt": prompt,
             "used_llm": False,
-            "embedding_provider": self.vector_store.embedding_provider_name,
-            "vector_store_type": self.vector_store.vector_store_type,
+            **self._runtime_metadata(),
         }
 
     def _no_answer(self, chunks: list[dict], prompt: str) -> dict:
@@ -104,8 +105,22 @@ class RagService:
             "retrieved_chunks": chunks,
             "prompt": prompt,
             "used_llm": False,
+            **self._runtime_metadata(),
+        }
+
+    def _runtime_metadata(
+        self,
+        llm_provider: str | None = None,
+        llm_model: str | None = None,
+    ) -> dict:
+        return {
             "embedding_provider": self.vector_store.embedding_provider_name,
             "vector_store_type": self.vector_store.vector_store_type,
+            "vector_store_fallback_reason": self.vector_store.fallback_reason,
+            "llm_provider": llm_provider or getattr(self.llm_service, "provider", None),
+            "llm_model": llm_model
+            or getattr(self.llm_service, "effective_model", None)
+            or getattr(self.llm_service, "model", None),
         }
 
     def _extract_grounded_answer(self, question: str, chunks: list[dict]) -> str:

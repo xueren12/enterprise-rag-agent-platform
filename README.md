@@ -175,6 +175,38 @@ LLM_TIMEOUT_SECONDS=30
 - 真实向量库演示：`VECTOR_STORE_TYPE=chroma`。如果 `chromadb` 不可用，系统会自动回退到本地 JSON 索引。
 - 真实 LLM 演示：`LLM_PROVIDER=deepseek` 或 `openai`，配置 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`。
 
+## 真实模式运行示例
+
+默认 mock 模式强调稳定和离线可测：`HashEmbeddingProvider` 不需要下载模型，`LLM_PROVIDER=mock` 不需要 API Key，适合 CI、课堂演示和面试现场兜底。真实模式强调语义召回和生成质量：使用 SentenceTransformer 生成真实向量，Chroma 持久化检索，DeepSeek / OpenAI-compatible LLM 基于上下文生成回答。
+
+PowerShell 示例：
+
+```powershell
+$env:EMBEDDING_PROVIDER = "sentence_transformer"
+$env:EMBEDDING_MODEL = "BAAI/bge-small-zh-v1.5"
+$env:VECTOR_STORE_TYPE = "chroma"
+$env:CHROMA_COLLECTION_NAME = "enterprise_rag_docs"
+
+$env:LLM_PROVIDER = "deepseek"
+$env:LLM_API_KEY = "<your-api-key>"
+$env:LLM_BASE_URL = "https://api.deepseek.com"
+$env:LLM_MODEL = "deepseek-chat"
+
+py -X utf8 run_demo.py --build-index
+py -X utf8 run_demo.py --question "订单退款流程是什么？"
+```
+
+OpenAI-compatible 私有网关示例：
+
+```powershell
+$env:LLM_PROVIDER = "openai"
+$env:LLM_API_KEY = "<your-api-key>"
+$env:LLM_BASE_URL = "https://your-compatible-endpoint/v1"
+$env:LLM_MODEL = "your-chat-model"
+```
+
+`/agent/chat` 响应会返回 `llm_provider`、`llm_model`、`embedding_provider`、`vector_store_type` 和 `vector_store_fallback_reason`，可以直接看出本次调用走的是 mock 还是真实 LLM、Chroma 是否发生了 fallback。
+
 ## API 示例
 
 构建索引：
@@ -273,6 +305,7 @@ py -X utf8 -m pytest -q
 - 文档加载、文本切片、向量检索。
 - mock LLM、LLM 失败回退、无上下文拒答。
 - 引用来源返回和 API 元数据字段。
+- 最小 RAG eval：订单退款流程、错误码 E1001、用户 U1001、无关问题拒答。
 - Tool Registry、Tool 参数校验、高风险 confirm 校验。
 - LangGraph 编排、fallback、完整 RAG + Tool 流程。
 - FastAPI `/knowledge/index`、`/agent/chat`、`/trace/{trace_id}`、`/health`。

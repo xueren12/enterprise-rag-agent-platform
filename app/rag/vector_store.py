@@ -29,6 +29,7 @@ class VectorStoreService:
         self._items: list[dict[str, Any]] = []
         self._collection = None
         self.vector_store_type = "local"
+        self.fallback_reason: str | None = None
 
     @property
     def embedding_provider_name(self) -> str:
@@ -37,19 +38,23 @@ class VectorStoreService:
     def build_index(self, docs: list[Document]) -> int:
         if self.requested_vector_store_type == "chroma":
             try:
+                self.fallback_reason = None
                 return self._build_chroma_index(docs)
-            except Exception:
+            except Exception as exc:
                 self.vector_store_type = "local_fallback"
+                self.fallback_reason = _fallback_reason(exc)
         return self._build_local_index(docs)
 
     def load_index(self) -> None:
-        if self.requested_vector_store_type == "chroma":
+        if self.requested_vector_store_type == "chroma" and self.vector_store_type != "local_fallback":
             try:
                 self._get_chroma_collection()
                 self.vector_store_type = "chroma"
+                self.fallback_reason = None
                 return
-            except Exception:
+            except Exception as exc:
                 self.vector_store_type = "local_fallback"
+                self.fallback_reason = _fallback_reason(exc)
 
         if not self.index_path.exists():
             raise FileNotFoundError(
@@ -59,11 +64,13 @@ class VectorStoreService:
         self._items = payload.get("items", [])
 
     def similarity_search(self, query: str, top_k: int = 5) -> list[dict]:
-        if self.requested_vector_store_type == "chroma":
+        if self.requested_vector_store_type == "chroma" and self.vector_store_type != "local_fallback":
             try:
+                self.fallback_reason = None
                 return self._chroma_similarity_search(query, top_k)
-            except Exception:
+            except Exception as exc:
                 self.vector_store_type = "local_fallback"
+                self.fallback_reason = _fallback_reason(exc)
 
         return self._local_similarity_search(query, top_k)
 
@@ -127,8 +134,10 @@ class VectorStoreService:
 
     def _build_local_index(self, docs: list[Document]) -> int:
         embeddings = self.embedding_provider.embed_documents([doc.content for doc in docs])
+        if self.vector_store_type != "local_fallback":
+            self.vector_store_type = "local"
+            self.fallback_reason = None
         self._write_local_copy(docs, embeddings)
-        self.vector_store_type = "local"
         return len(self._items)
 
     def _write_local_copy(self, docs: list[Document], embeddings: list[list[float]]) -> None:
@@ -204,3 +213,8 @@ def _import_chromadb():
     except ImportError as exc:
         raise RuntimeError("chromadb is not installed. Falling back to local vector store.") from exc
     return chromadb
+
+
+def _fallback_reason(exc: Exception) -> str:
+    reason = str(exc).strip() or exc.__class__.__name__
+    return reason[:200]

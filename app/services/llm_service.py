@@ -30,13 +30,19 @@ class LLMService:
         self.model = model or LLM_MODEL
         self.timeout_seconds = timeout_seconds
 
+    @property
+    def effective_model(self) -> str:
+        if self.provider == "mock":
+            return "mock"
+        return self.model
+
     def chat(self, prompt: str) -> LLMResponse:
         if self.provider == "mock":
             return LLMResponse(
                 content=self._mock_answer(prompt),
                 used_llm=True,
                 provider=self.provider,
-                model="mock",
+                model=self.effective_model,
             )
         return self._openai_compatible_chat(prompt)
 
