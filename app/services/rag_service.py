@@ -10,17 +10,27 @@ from app.rag.query_terms import extract_query_terms
 from app.rag.retriever import Retriever
 from app.rag.text_splitter import TextSplitter
 from app.rag.vector_store import VectorStoreService
+from app.services.llm_service import LLMService
 
 
 class RagService:
     """Orchestrates first-stage RAG indexing, retrieval and grounded answering."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        vector_store: VectorStoreService | None = None,
+        llm_service: LLMService | None = None,
+    ) -> None:
         self.loader = DocumentLoader()
         self.splitter = TextSplitter()
-        self.vector_store = VectorStoreService()
+        self.vector_store = vector_store or VectorStoreService()
         self.retriever = Retriever(self.vector_store)
         self.prompt_builder = RagPromptBuilder()
+        self.llm_prompt_builder = RagPromptBuilder()
+        self.llm_prompt_builder.template_path = self.llm_prompt_builder.template_path.with_name(
+            "rag_llm_answer_prompt.txt"
+        )
+        self.llm_service = llm_service or LLMService()
 
     def build_index(self, docs_dir: str | Path = DOCS_DIR) -> dict:
         documents = self.loader.load(docs_dir)
@@ -49,31 +59,53 @@ class RagService:
                 selected = exact_selected
 
         if not selected:
-            return {
-                "status": "no_answer",
-                "answer": NO_ANSWER_TEXT,
-                "citations": [],
-                "retrieved_chunks": chunks,
-                "prompt": self.prompt_builder.build(question, chunks),
-            }
+            return self._no_answer(chunks, self.prompt_builder.build(question, chunks))
+
+        prompt = self.llm_prompt_builder.build(question, selected)
+        citations = self._dedupe_citations(selected)
+
+        try:
+            llm_response = self.llm_service.chat(prompt)
+            answer = llm_response.content.strip()
+            if answer and answer != NO_ANSWER_TEXT:
+                return {
+                    "status": "success",
+                    "answer": answer,
+                    "citations": citations,
+                    "retrieved_chunks": chunks,
+                    "prompt": prompt,
+                    "used_llm": llm_response.used_llm,
+                    "embedding_provider": self.vector_store.embedding_provider_name,
+                    "vector_store_type": self.vector_store.vector_store_type,
+                }
+        except Exception:
+            pass
 
         answer = self._extract_grounded_answer(question, selected)
         if not answer:
-            return {
-                "status": "no_answer",
-                "answer": NO_ANSWER_TEXT,
-                "citations": [],
-                "retrieved_chunks": chunks,
-                "prompt": self.prompt_builder.build(question, chunks),
-            }
+            return self._no_answer(chunks, prompt)
 
-        citations = self._dedupe_citations(selected)
         return {
             "status": "success",
             "answer": answer,
             "citations": citations,
             "retrieved_chunks": chunks,
-            "prompt": self.prompt_builder.build(question, selected),
+            "prompt": prompt,
+            "used_llm": False,
+            "embedding_provider": self.vector_store.embedding_provider_name,
+            "vector_store_type": self.vector_store.vector_store_type,
+        }
+
+    def _no_answer(self, chunks: list[dict], prompt: str) -> dict:
+        return {
+            "status": "no_answer",
+            "answer": NO_ANSWER_TEXT,
+            "citations": [],
+            "retrieved_chunks": chunks,
+            "prompt": prompt,
+            "used_llm": False,
+            "embedding_provider": self.vector_store.embedding_provider_name,
+            "vector_store_type": self.vector_store.vector_store_type,
         }
 
     def _extract_grounded_answer(self, question: str, chunks: list[dict]) -> str:

@@ -26,6 +26,9 @@ class AgentChatResponse(BaseModel):
     status: str
     answer: str
     citations: list[Citation] = Field(default_factory=list)
+    used_llm: bool = False
+    embedding_provider: str | None = None
+    vector_store_type: str | None = None
     need_tool: bool
     tool_name: str | None = None
     tool_args: dict[str, Any] = Field(default_factory=dict)

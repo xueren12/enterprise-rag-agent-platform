@@ -1,6 +1,8 @@
 {
-  "version": 1,
-  "dimensions": 512,
+  "version": 2,
+  "embedding_provider": "hash",
+  "embedding_model": "hash-512",
+  "vector_store_type": "local_fallback",
   "items": [
     {
       "content": "# 内部接口说明\n\n本文档用于说明演示环境中的内部接口规范，所有接口均为模拟资料。\n\n## 用户信息查询接口\n\n接口名称：用户账号状态查询\n\n用途：根据用户编号查询账号状态、风控等级和冻结原因。\n\n请求参数：\n\n- user_id：用户编号，例如 U1001。\n\n响应字段：\n\n- user_id：用户编号。\n- status：账号状态，normal 表示正常，frozen 表示冻结。\n- risk_level：风控等级，取值为 low、medium、high。\n- freeze_reason：账号冻结原因，正常账号为空。\n\n## 调用注意事项\n\n- 查询用户账号状态时应优先使用 http_api_tool。\n- 当用户账号状态为 frozen 时，应结合错误码手册和操作 FAQ 判断下一步处理方式。\n- 接口仅用于查询，不允许通过该接口修改用户资料或解除冻结。\n\n## 示例\n\n查询用户 U1001 的账号状态时，工具入参为 {\"user_id\": \"U1001\"}。",
