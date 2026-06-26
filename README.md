@@ -85,6 +85,18 @@ flowchart LR
 
 文档需要切片，是因为企业文档通常很长，整篇向量化会稀释局部语义，也会让上下文过长。chunk 太大会召回噪声，chunk 太小会丢失步骤之间的上下文；overlap 用来降低答案被切在边界处的概率。
 
+## 为什么升级真实 RAG 链路
+
+早期版本使用手写 HashEmbedding、本地相似度计算和抽取式回答，优点是稳定、离线、适合测试，但它更像教学用 MVP：向量语义能力有限，检索结果很依赖关键词重合，回答也只是从片段里摘句子。
+
+本轮升级把链路拆成三个可替换层次：
+
+- 真实 Embedding：`SentenceTransformerEmbeddingProvider` 可以使用 `BAAI/bge-small-zh-v1.5` 等中文/多语言模型，让召回更接近语义匹配；`HashEmbeddingProvider` 继续作为测试和离线 fallback。
+- 真实向量库：`VectorStoreService` 优先使用 Chroma 持久化向量索引，保留 `build_index` / `similarity_search` 接口不变；Chroma 不可用时自动回退到本地 JSON 索引。
+- 真实 LLM：`LLMService` 支持 DeepSeek / OpenAI-compatible Chat API，根据检索上下文生成自然语言回答；mock 模式保证没有 API Key 时测试仍然稳定。
+
+这样项目既能在面试现场离线演示，也能切换到更接近生产的 Embedding + 向量库 + LLM 组合。
+
 ## Tool Calling 流程
 
 ```mermaid
